@@ -26,9 +26,11 @@ enum Estado {
 };
 
 // Variables 
+float peso;
 float voltajeBase = 0.0;  // Voltaje de base sin peso
 float pesoCalibrado = 0.0;  // Peso calibrado
 const float limitePeso = 100.0;  // Límite de peso en gramos
+char mensajePeso[16];
 
 // Variables para el temporizador de la alarma
 Timer temporizadorAlarma;
@@ -47,7 +49,7 @@ void mostrarMensaje() {
         sprintf(cadena,"%.2f ",temp); // Calcula la cadena para visualizar la temperatura en el LCD
         Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
         Pantalla.print(cadena); // Manda el texto formateado al LCD
-        thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo.
+        thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo
     }
 }
 
@@ -67,6 +69,13 @@ void Alarmando(Estado &estadoActual) {
     }
 }
 
+void calcularPeso() {
+    while (true) {
+        peso = (galga*3.3-1.1)/0.0129;
+
+    }
+
+}
 
 // Función principal
 int main() {
@@ -129,8 +138,14 @@ int main() {
                 ledVerde = 1;  // Enciende LED verde
                 Alarma = 0;  // Apaga LED de alarma
                 
-                // Realiza mediciones y verifica el límite de peso
-                float pesoActual = (Galga.read() - voltajeBase) * pesoCalibrado;
+                peso = calcularPeso(galga);   // Convierte el valor del adc en temperatura
+                sprintf(mensajePeso,"%.2f ",peso);
+                Pantalla.setRGB(0xff, 0xff, 0xff);  
+                Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
+                Pantalla.print("El peso medido es"); // Escribe un texto fijo
+                Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
+                Pantalla.print(mensajePeso); // Escribe un texto fijo
+                thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo
                 
                 if (pesoActual > limitePeso) {
                     estadoActual = ALARMA;
