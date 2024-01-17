@@ -1,181 +1,230 @@
-/* mbed Microcontroller Library
- * Copyright (c) 2019 ARM Limited
- * SPDX-License-Identifier: Apache-2.0
- */
-
-#include "mbed.h"
 #include "Grove_LCD_RGB_Backlight.h"
+#include "mbed.h"
+#include "mbed_wait_api.h"
 
-#define WAIT_TIME_MS 500 
+#define WAIT_TIME_MS 5
 
 // Definición de pines y componentes
+InterruptIn botonReset(D3); // Botón de reset
 AnalogIn Galga(A0);  // Pin analógico para la galga
-DigitalIn botonTara(D2);   // Botón para tarar
-DigitalIn botonReset(D3); // Botón de reset
+DigitalIn boton(D2);   // Botón para tarar
 DigitalOut ledRojo(D4);      // LED rojo
-DigitalOut ledVerde(D5);    // LED verde
+DigitalOut ledVerde(LED1);    // LED verde
 DigitalOut Alarma(D6);    // Alarma
 Grove_LCD_RGB_Backlight Pantalla(PB_9,PB_8); // Pantalla
 
-// Estados de la máquina
-enum Estado {
-    REPOSO,
-    CALIBRANDO,
-    MIDIENDO,
-    ALARMA
-};
+Timer temporizador; //
 
-// Variables 
+enum estados {
+  Reposo,
+  Calibracion0g,
+  Calibracion100g,
+  Midiendo,
+  Alarmando
+} estado;
+
 float peso;
-float voltajeBase = 0.0;  // Voltaje de base sin peso
-float pesoCalibrado = 0.0;  // Peso calibrado
-const float limitePeso = 100.0;  // Límite de peso en gramos
-char mensajePeso[16];
+float voltajeMedio0g;
+float voltajeMedio100g;
+float pendiente;
+char mensajePeso[100];
 
-// Variables para el temporizador de la alarma
-Timer temporizadorAlarma;
-const float tiempoLimiteAlarma = 3.0;  // Tiempo límite para desactivar la alarma en segundos
-
-// Función para mostrar mensajes en la pantalla LCD (simulado)
-void mostrarMensaje() {
-  
-  Pantalla.setRGB(0xff, 0xff, 0xff);                
-
-    while (true)
-    {
-        Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
-        Pantalla.print("El peso es:"); // Escribe un texto fijo
-        temp=calculaTemp(ntc.read());   // Convierte el valor del adc en temperatura
-        sprintf(cadena,"%.2f ",temp); // Calcula la cadena para visualizar la temperatura en el LCD
-        Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
-        Pantalla.print(cadena); // Manda el texto formateado al LCD
-        thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo
-    }
-}
+void CalcularPeso() { 
+            pendiente = (voltajeMedio100g-voltajeMedio0g)/100;
+            peso = (Galga*3.3-voltajeMedio0g)/pendiente;
+    
+     }
 
 // Función para manejar el estado de parpadeo del LED rojo
-void parpadearLED(Estado &estadoActual) {
-    while (estadoActual == CALIBRANDO || estadoActual == ALARMA) { 
+void parpadearLED() {
+    while (estado == Calibracion0g || estado == Calibracion100g || estado == Alarmando) { 
         ledRojo = !ledRojo;       // Alternar estado del LED
-        wait(0.2);        // Esperar 0.2 segundos
+        wait_us(200000);
     }
 }
 
-// Función para manejar el estado de parpadeo de la alarma
-void Alarmando(Estado &estadoActual) {
-    while (estadoActual == ALARMA) { 
+// Función para manejar la activación de la alarma
+void activarAlarma() {
+    while (estado == Alarmando) { 
         Alarma = !Alarma;       // Alternar estado del LED
-        wait(0.25);        // Esperar 0.2 segundos
+        wait_us(200000);       
     }
 }
 
-void calcularPeso() {
-    while (true) {
-        peso = (galga*3.3-1.1)/0.0129;
+float calcularMediaVoltaje0g(float Voltaje0g){
+    int numMuestras = 200;
+    float voltajeAcumulado = 0.0;
 
+    for (int i = 0; i < numMuestras; ++i) {
+        // Acumular los valores medidos
+        voltajeAcumulado += Voltaje0g;
+        wait_us(10000);
     }
+    // Calcular el valor medio dividiendo la suma acumulada por el número de muestras
+    voltajeMedio0g = voltajeAcumulado / numMuestras;
+
+    return voltajeMedio0g;
 
 }
 
-// Función principal
-int main() {
-    Estado estadoActual = REPOSO;
-    temporizadorAlarma.start();
+float calcularMediaVoltaje100g(float Voltaje100g){
+    int numMuestras = 200;
+    float voltajeAcumulado = 0.0;
+
+    for (int i = 0; i < numMuestras; ++i) {
+        // Acumular los valores medidos
+        voltajeAcumulado += Voltaje100g;
+        wait_us(20000);
+    }
+    // Calcular el valor medio dividiendo la suma acumulada por el número de muestras
+    voltajeMedio100g = voltajeAcumulado / numMuestras;
+
+    return voltajeMedio100g;
+
+}
+
+
+void estadoReposo() {
+
+    ledRojo = 1;  // Enciende LED rojo
+    ledVerde = 0;  // Apaga LED verde
+    Alarma = 0;  // Apaga la alarma
+    Pantalla.clear();  
+    Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
+    Pantalla.print("Quitar el peso "); // Escribe un texto fijo
+    Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
+    Pantalla.print("y pulsar boton"); // Escribe un texto fijo
+    thread_sleep_for(WAIT_TIME_MS);
     
-    while (1) {
-        switch (estadoActual) {
-            case REPOSO:
-                // Estado de reposo
-                ledRojo = 1;  // Enciende LED rojo
-                ledVerde = 0;  // Apaga LED verde
-                Alarma = 0;  // Apaga la alarma
-                
-                if (botonReset) {
-                    Pantalla.setRGB(0xff, 0xff, 0xff);  
-                    Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
-                    Pantalla.print("Retire cualquier peso y "); // Escribe un texto fijo
-                    Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
-                    Pantalla.print("presione el botón de tara"); // Escribe un texto fijo
-                    thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo
+  if (boton == 1) {
+        voltajeMedio0g = calcularMediaVoltaje0g(Galga*3.3);
+        estado = Calibracion0g;
+    
+  }
+}
 
-                    Pantalla.print("coloque 100g y presione calibrar"); // Escribe un texto fijo
 
-                    estadoActual = CALIBRANDO;
-                }
-                wait(1); // Debounce para evitar cambios rápidos de estado
-                break;
 
-            case CALIBRANDO:
-                // Estado de calibración
-                parpadearLED(estadoActual);  // Parpadea el LED rojo
-                ledVerde = 0;  // Apaga LED verde
-                Alarma = 0;  // Apaga LED de alarma
-                
-                if (botonReset) {
-                    // Si se vuelve a pulsar el boton de calibrar, se reinicia la máquina de estados
-                    estadoActual = REPOSO;
+void estadoCalibracion0g() {
 
-                    Pantalla.setRGB(0xff, 0xff, 0xff);  
-                    Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
-                    Pantalla.print("Reiniciando..."); // Escribe un texto fijo
-                    Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
-                    Pantalla.print("Pulsar boton reset"); // Escribe un texto fijo
-                    thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo.
+    Pantalla.clear();  
+    Pantalla.locate(0,0);
+    Pantalla.print("Coloque 100g"); 
+    Pantalla.locate(0,1); 
+    Pantalla.print("y pulsar boton"); 
+    thread_sleep_for(WAIT_TIME_MS);
 
-                } else if (botonTara) {
-                    // Calibrar presionado, realiza la calibración
-                    float peso100g = Galga.read();
-                    pesoCalibrado = 100.0 / (peso100g - voltajeBase);
-                    estadoActual = REPOSO;
-                    mostrarMensaje("Calibración exitosa"); 
-                }
-                wait(1); // Debounce para evitar cambios rápidos de estado
-                break;
+    if (estado == Calibracion0g) { 
+        ledRojo = !ledRojo;       // Alternar estado del LED
+        wait_us(2000);
+    }
 
-            case MIDIENDO:
-                // Estado de medición
-                ledRojo = 0;  // Apaga LED rojo
-                ledVerde = 1;  // Enciende LED verde
-                Alarma = 0;  // Apaga LED de alarma
-                
-                peso = calcularPeso(galga);   // Convierte el valor del adc en temperatura
-                sprintf(mensajePeso,"%.2f ",peso);
-                Pantalla.setRGB(0xff, 0xff, 0xff);  
-                Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
-                Pantalla.print("El peso medido es"); // Escribe un texto fijo
-                Pantalla.locate(0,1); // Lo siguiente lo escribe en la segunda fila, primera columna
-                Pantalla.print(mensajePeso); // Escribe un texto fijo
-                thread_sleep_for(WAIT_TIME_MS); // Espera medio segundo
-                
-                if (pesoActual > limitePeso) {
-                    estadoActual = ALARMA;
-                    temporizadorAlarma.reset();  // Reinicia el temporizador de alarma
-                    Pantalla.setRGB(0xff, 0xff, 0xff);  
-                    Pantalla.locate(0,0); // Lo siguiente que se mande al LCD en primera fila, primera columna
-                    Pantalla.print("Exceso de peso"); // Escribe un texto fijo
-                }
-                wait(1); // Debounce para evitar cambios rápidos de estado
-                break;
+  if (boton == 1) {  
+        voltajeMedio100g = calcularMediaVoltaje100g(Galga*3.3);  
+        estado = Calibracion100g;
+  }
+}
 
-            case ALARMA:
-                // Estado de alarma
-                parpadearLED(estadoActual);  // Parpadea el LED rojo
-                ledVerde = 0;  // Apaga LED verde
-                
-                if (temporizadorAlarma.read() > tiempoLimiteAlarma) {
-                    // Desactiva la alarma después de 3 segundos
-                    estadoActual = REPOSO;
-                    temporizadorAlarma.reset();  // Reinicia el temporizador de alarma
-                    mostrarMensaje("Alarma desactivada automáticamente");
-                    wait(0.5);
-                } else {
-                    // Activa y desactiva la alarma cada 0.25 segundos
-                    Alarmando(estadoActual);
-                }
-                wait(1); // Debounce para evitar cambios rápidos de estado
-                break;
-        }
+
+void estadoCalibracion100g() {
+
+    Pantalla.clear();  
+    Pantalla.locate(0,0);
+    Pantalla.print("Retirar peso"); 
+    Pantalla.locate(0,1); 
+    Pantalla.print("y pulsar boton"); 
+    thread_sleep_for(WAIT_TIME_MS);
+
+    if (estado == Calibracion100g) { 
+        ledRojo = !ledRojo;       // Alternar estado del LED
+    }
+
+  if (boton == 1) {
+        ledRojo = 0; 
+        ledVerde = 1;  
+        Alarma = 0;         
         
+        estado = Midiendo;
+
+  }
+}
+
+void estadoMidiendo() {
+
+        Pantalla.setRGB(0x00, 0x80, 0x00);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("El peso es:"); 
+        sprintf(mensajePeso, "%.2f g", peso);
+        Pantalla.locate(0,1); 
+        Pantalla.print(mensajePeso);
+        wait_us(1000000);
+        thread_sleep_for(WAIT_TIME_MS); 
+  
+  if (peso >= 130) {
+        ledVerde = 0;  
+        estado = Alarmando;
+
+  }
+}
+
+void estadoAlarmando() {
+
+       if (estado == Alarmando) { 
+        ledRojo = !ledRojo;       // Alternar estado del LED
+        Alarma = !Alarma;
+        wait_us(2000);
     }
-    
+ 
+    temporizador.reset();
+    temporizador.start();
+
+    Pantalla.setRGB(0xff, 0x00, 0x00);
+    Pantalla.clear();  
+    Pantalla.locate(0,0);
+    Pantalla.print("ALARMA");
+    Pantalla.locate(0,1); 
+    Pantalla.print("Exceso de peso");
+    thread_sleep_for(WAIT_TIME_MS);
+
+  if (peso < 120) {
+        ledRojo = 0; 
+        ledVerde = 1;  
+        Alarma = 0;  
+        estado = Midiendo; 
+  }
+  
+}
+
+
+int main() {
+
+  temporizador.reset();
+  Pantalla.setRGB(0xff, 0xff, 0xff);
+  estado = Reposo;
+
+  while (true) {
+    CalcularPeso();
+    thread_sleep_for(WAIT_TIME_MS);
+
+    switch (estado) {
+    case Reposo:
+      estadoReposo();
+      break;
+    case Calibracion0g:
+      estadoCalibracion0g();
+      break;
+    case Calibracion100g:
+      estadoCalibracion100g();
+      break;
+    case Midiendo:
+      estadoMidiendo();
+      break;
+    case Alarmando:
+      estadoAlarmando();
+      break;
+    }
+
+    thread_sleep_for(WAIT_TIME_MS);
+  }
 }
