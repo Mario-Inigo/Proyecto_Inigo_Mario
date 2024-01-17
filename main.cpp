@@ -1,3 +1,4 @@
+#include "DigitalIn.h"
 #include "Grove_LCD_RGB_Backlight.h"
 #include "mbed.h"
 #include "mbed_wait_api.h"
@@ -5,7 +6,7 @@
 #define WAIT_TIME_MS 5
 
 // Definición de pines y componentes
-InterruptIn botonReset(D3); // Botón de reset
+DigitalIn botonReset(D3); // Botón de reset
 AnalogIn Galga(A0);  // Pin analógico para la galga
 DigitalIn boton(D2);   // Botón para tarar
 DigitalOut ledRojo(D4);      // LED rojo
@@ -103,6 +104,7 @@ void estadoReposo() {
         estado = Calibracion0g;
     
   }
+
 }
 
 
@@ -124,6 +126,19 @@ void estadoCalibracion0g() {
   if (boton == 1) {  
         voltajeMedio100g = calcularMediaVoltaje100g(Galga*3.3);  
         estado = Calibracion100g;
+  }
+
+    if (botonReset == 1){
+
+        Pantalla.setRGB(0xff, 0xff, 0xff);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("Reseteando");
+        thread_sleep_for(WAIT_TIME_MS); 
+        wait_us(2000000);
+
+        estado = Reposo;
+
   }
 }
 
@@ -147,6 +162,19 @@ void estadoCalibracion100g() {
         Alarma = 0;         
         
         estado = Midiendo;
+
+  }
+
+    if (botonReset == 1){
+
+        Pantalla.setRGB(0xff, 0xff, 0xff);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("Reseteando");
+        thread_sleep_for(WAIT_TIME_MS); 
+        wait_us(2000000);
+
+        estado = Reposo;
 
   }
 }
@@ -173,6 +201,19 @@ void estadoMidiendo() {
       estado = Tarando;
 
   }
+
+  if (botonReset == 1){
+
+        Pantalla.setRGB(0xff, 0xff, 0xff);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("Reseteando");
+        thread_sleep_for(WAIT_TIME_MS); 
+        wait_us(2000000);
+
+        estado = Reposo;
+
+  }
 }
 
 void estadoTarando(){
@@ -186,6 +227,17 @@ void estadoTarando(){
 
         peso = peso - tara;
         estado = Midiendo;
+        if (botonReset == 1){
+
+            Pantalla.setRGB(0xff, 0xff, 0xff);
+            Pantalla.clear();  
+            Pantalla.locate(0,0);
+            Pantalla.print("Reseteando");
+            thread_sleep_for(WAIT_TIME_MS); 
+            wait_us(2000000);
+
+            estado = Reposo;
+  }
 }
 
 void estadoAlarmando() {
@@ -212,6 +264,19 @@ void estadoAlarmando() {
         ledVerde = 1;  
         Alarma = 0;  
         estado = Midiendo; 
+  }
+
+    if (botonReset == 1){
+
+        Pantalla.setRGB(0xff, 0xff, 0xff);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("Reseteando");
+        thread_sleep_for(WAIT_TIME_MS); 
+        wait_us(2000000);
+
+        estado = Reposo;
+
   }
   
 }
