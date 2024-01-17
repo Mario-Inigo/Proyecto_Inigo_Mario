@@ -20,6 +20,7 @@ enum estados {
   Calibracion0g,
   Calibracion100g,
   Midiendo,
+  Tarando,
   Alarmando
 } estado;
 
@@ -27,11 +28,12 @@ float peso;
 float voltajeMedio0g;
 float voltajeMedio100g;
 float pendiente;
+float tara;
 char mensajePeso[100];
 
 void CalcularPeso() { 
             pendiente = (voltajeMedio100g-voltajeMedio0g)/100;
-            peso = (Galga*3.3-voltajeMedio0g)/pendiente;
+            peso = ((Galga*3.3-voltajeMedio0g)/pendiente)-tara;
     
      }
 
@@ -158,14 +160,32 @@ void estadoMidiendo() {
         sprintf(mensajePeso, "%.2f g", peso);
         Pantalla.locate(0,1); 
         Pantalla.print(mensajePeso);
-        wait_us(1000000);
+        wait_us(1500000);
         thread_sleep_for(WAIT_TIME_MS); 
   
   if (peso >= 130) {
         ledVerde = 0;  
         estado = Alarmando;
+  }
+
+  if (boton == 1) {
+      tara = peso;
+      estado = Tarando;
 
   }
+}
+
+void estadoTarando(){
+
+        Pantalla.setRGB(0xff, 0xff, 0xff);
+        Pantalla.clear();  
+        Pantalla.locate(0,0);
+        Pantalla.print("Tarando");
+        thread_sleep_for(WAIT_TIME_MS); 
+        wait_us(2000000);
+
+        peso = peso - tara;
+        estado = Midiendo;
 }
 
 void estadoAlarmando() {
@@ -198,7 +218,7 @@ void estadoAlarmando() {
 
 
 int main() {
-
+  tara = 0;
   temporizador.reset();
   Pantalla.setRGB(0xff, 0xff, 0xff);
   estado = Reposo;
@@ -220,6 +240,9 @@ int main() {
     case Midiendo:
       estadoMidiendo();
       break;
+    case Tarando:
+        estadoTarando();
+        break;
     case Alarmando:
       estadoAlarmando();
       break;
